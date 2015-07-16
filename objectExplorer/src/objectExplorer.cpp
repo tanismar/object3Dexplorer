@@ -1,5 +1,5 @@
 /* 
- * Copyright (C) 2014 Department of Robotics Brain and Cognitive Sciences - Istituto Italiano di Tecnologia
+ * Copyright (C) 2015 iCub Facility - Istituto Italiano di Tecnologia
  * Author: Tanis Mar
  * email:  tanis.mar@iit.it
  * Permission is granted to copy, distribute, and/or modify this program
@@ -159,11 +159,13 @@ bool ObjectExplorer::respond(const Bottle &command, Bottle &reply)
 
     if (receivedCmd == "exploreAuto"){
         // Performs automatic exploration, registering images every N seconds, and merging without user confirmation
-        int regPeriod = 10; //seconds between each image registration
+        bool ok;
         if (command.size() == 2){
             regPeriod = command.get(1).asInt();
+            ok = exploreAutomatic(regPeriod);    
+        } else {
+            ok = exploreAutomatic();
         }
-        bool ok = exploreAutomatic(regPeriod);
         if (ok){
             reply.addString(" [ack] Exploration successfully finished.");
             return true;
@@ -215,7 +217,7 @@ bool ObjectExplorer::respond(const Bottle &command, Bottle &reply)
             reply.addString(command.get(1).asString());
             return true;
         }else {
-            fprintf(stdout,"Couldnt change the name. \n");
+            fprintf(stdout,"Couldn't change the name. \n");
             reply.addString("[nack] Couldnt change the name. ");
             return false;
         }
@@ -306,7 +308,7 @@ bool ObjectExplorer::exploreAutomatic(const int period)
         showPointCloud(cloud_merged);
         savePointsPly(cloud_merged, mergedName, false);
 
-        Time::delay(10);
+        Time::delay(period);
 
     }
 

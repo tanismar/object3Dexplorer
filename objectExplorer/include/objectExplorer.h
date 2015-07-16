@@ -92,7 +92,7 @@ protected:
 
     /* functions*/
     
-    bool                exploreAutomatic(const int regPeriod);
+    bool                exploreAutomatic(const int regPeriod = 0);
     bool                exploreInteractive();
     bool                getPointCloud();
     bool                alignPointClouds(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_from, const pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_to, pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_aligned, Eigen::Matrix4f& transfMat);
