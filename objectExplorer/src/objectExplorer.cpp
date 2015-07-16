@@ -503,19 +503,23 @@ bool ObjectExplorer::alignPointClouds(const pcl::PointCloud<pcl::PointXYZRGB>::P
 
     if (verbose){printf("Aligning clouds\n");}
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_init_aligned (new pcl::PointCloud<pcl::PointXYZRGB> ());
-    sac_ia.align(*cloud_init_aligned);
+    //sac_ia.align(*cloud_init_aligned);
+    sac_ia.align(*cloud_aligned);
 
     cout << "FPFH has converged:" << sac_ia.hasConverged() << " score: " << sac_ia.getFitnessScore() << endl;
 
     if (verbose){printf("Getting alineation matrix\n");}
-    Eigen::Matrix4f initAlignMat = sac_ia.getFinalTransformation();
+    //Eigen::Matrix4f initAlignMat = sac_ia.getFinalTransformation();
+    transfMat = sac_ia.getFinalTransformation();
 
     // -------------------- Apply good old ICP registration for fine alginment --------------------------------
-
+    
     printf("Applying ICP fine lignment... \n");
     // The Iterative Closest Point algorithm
     if (verbose){printf("Setting ICP parameters \n");}
     pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
+    icp.setMaxCorrespondenceDistance (0.05); 
+    icp.setTransformationEpsilon (1e-6);
 
     //ICP algorithm
     if (verbose){printf("Adding source cloud \n");}
@@ -531,7 +535,6 @@ bool ObjectExplorer::alignPointClouds(const pcl::PointCloud<pcl::PointXYZRGB>::P
     cout << icp.getFinalTransformation() << endl;
     if (verbose){printf("Clouds aligned! \n");}
     transfMat = icp.getFinalTransformation();
-
     return true;
 }
 
