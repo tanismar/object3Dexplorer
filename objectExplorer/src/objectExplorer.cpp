@@ -81,7 +81,7 @@ bool ObjectExplorer::configure(ResourceFinder &rf)
     driverG.view(iGaze);
 
 
-    iGaze->setSaccadesStatus(false);
+    iGaze->setSaccadesMode(false);
             iGaze->setNeckTrajTime(1.5);
             iGaze->setEyesTrajTime(0.5);
             iGaze->blockEyes(0.0);
