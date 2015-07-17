@@ -22,6 +22,8 @@ using namespace yarp::os;
 using namespace yarp::sig;
 using namespace yarp::dev;
 using namespace yarp::math;
+
+using namespace iCub::YarpCloud;
   
 /**********************************************************
                     PUBLIC METHODS
@@ -39,17 +41,33 @@ bool ObjectExplorer::configure(ResourceFinder &rf)
     cloudsRF.setDefaultConfigFile(cloudpath_file.c_str());
     cloudsRF.configure(0,NULL);
 
-    cloudsPath = cloudsRF.find("clouds_path").asString();
+    // Set the path that contains previously saved pointclouds
+    string defPathFrom = "/share/ICUBcontrib/contexts/object3Dexplorer/sampleClouds/";
+    string icubContribEnvPath = yarp::os::getenv("ICUBcontrib_DIR");
+    string localModelsPath    = rf.check("clouds_path")?rf.find("clouds_path").asString().c_str():defPathFrom;     //cloudsRF.find("clouds_path").asString();
+
+    cloudsPathFrom  = icubContribEnvPath + localModelsPath;
+
+    // Set the path where new pointclouds will be saved
+    string defSaveDir = "/saveModels";
+    string cloudsSaveDir = rf.check("save")?rf.find("save").asString().c_str():defSaveDir;
+    if (cloudsSaveDir[0]!='/')
+        cloudsSaveDir="/"+cloudsSaveDir;
+    cloudsPathTo="."+cloudsSaveDir;
+
+    yarp::os::mkdir_p(cloudsPathTo.c_str());            // Create the save folder if it didnt exist
+
 
     cloudName = rf.check("modelName", Value("cloud")).asString();
     eye = rf.check("camera", Value("left")).asString();
     verbose = rf.check("verbose", Value(true)).asBool();
+    normalizePose = rf.check("normalizePose", Value(true)).asBool();
 
     //ports
     bool ret = true;
     ret = seedInPort.open(("/"+name+"/seed:i").c_str());	                       // input port to receive data from user
-    ret = ret && meshInPort.open(("/"+name+"/mesh:i").c_str());                  // port to receive pointclouds from
-    ret = ret && meshOutPort.open(("/"+name+"/mesh:o").c_str());                  // port to receive pointclouds from
+    ret = ret && meshInPort.open(("/"+name+"/mesh:i").c_str());                    // port to receive pointclouds from
+    ret = ret && meshOutPort.open(("/"+name+"/mesh:o").c_str());                   // port to receive pointclouds from
     if (!ret){
         printf("\nProblems opening ports\n");
         return false;
@@ -58,7 +76,7 @@ bool ObjectExplorer::configure(ResourceFinder &rf)
     // RPC ports
     bool retRPC = true;
     retRPC = rpcPort.open(("/"+name+"/rpc:i").c_str());
-    retRPC = retRPC && rpcObjRecPort.open(("/"+name+"/objrec:rpc").c_str());             // port to send data out for recording
+    retRPC = retRPC && rpcObjRecPort.open(("/"+name+"/objrec:rpc").c_str());             // port to communicate with object reconstruction module
     retRPC = retRPC && rpcVisualizerPort.open(("/"+name+"/visualizer:rpc").c_str());     // port to command the visualizer module
     if (!retRPC){
         printf("\nProblems opening RPC ports\n");
@@ -91,6 +109,7 @@ bool ObjectExplorer::configure(ResourceFinder &rf)
     closing = false;
     initAlignment = false;
     numCloudsSaved = 0;
+    NO_FILENUM = -1;
 
     cloud_in = pcl::PointCloud<pcl::PointXYZRGB>::Ptr (new pcl::PointCloud<pcl::PointXYZRGB> ());// Point cloud
     cloud_temp = pcl::PointCloud<pcl::PointXYZRGB>::Ptr (new pcl::PointCloud<pcl::PointXYZRGB> ());// Point cloud
@@ -280,7 +299,7 @@ bool ObjectExplorer::exploreAutomatic(const int period)
         getPointCloud();
         showPointCloud(cloud_in);
         *cloud_merged = *cloud_in;  //Initialize cloud merged
-        savePointsPly(cloud_merged, mergedName,false);
+        CloudUtils::savePointsPly(cloud_merged,cloudsPathTo, mergedName, NO_FILENUM);
         initDone = true;
         printf("Base cloud initialized \n");
 
@@ -296,23 +315,21 @@ bool ObjectExplorer::exploreAutomatic(const int period)
         showPointCloud(cloud_in);
 
         printf("\n Saving partial registration for later use \n ");
-        savePointsPly(cloud_in, cloudName);
+        CloudUtils::savePointsPly(cloud_in,cloudsPathTo, cloudName, numCloudsSaved);
 
-        // Merge the last recorded cloud_in with the existing cloud_merged and save on cloud_temp
+        // Aling last reconstructred cloud and merge it with the existing cloud_merged
         Eigen::Matrix4f alignMatrix;
         cloud_aligned->clear();
         alignPointClouds(cloud_in, cloud_merged, cloud_aligned, alignMatrix);
-        *cloud_merged += *cloud_aligned;                            // write aligned registration first to a temporal merged
+        *cloud_merged += *cloud_aligned;
 
         // Display the merged cloud
         showPointCloud(cloud_merged);
-        savePointsPly(cloud_merged, mergedName, false);
+        CloudUtils::savePointsPly(cloud_merged, cloudsPathTo, mergedName, NO_FILENUM);
 
         Time::delay(period);
-
     }
 
-    // Visualize merged pointcloud
     printf("Exploration finished, returning control. \n");
     return true;
 
@@ -328,7 +345,6 @@ bool ObjectExplorer::exploreInteractive()
     string  mergedName = cloudName + "_merged";
     while (!initDone)
     {
-
         // Register and display the cloud
         getPointCloud();
         showPointCloud(cloud_in);
@@ -338,9 +354,9 @@ bool ObjectExplorer::exploreInteractive()
         cin >> answerInit;
         if ((answerInit == "y")||(answerInit == "Y"))
         {
-            *cloud_merged = *cloud_in;  //Initialize cloud merged
-            *cloud_temp = *cloud_in;    //Initialize auxiliary cloud on which temporal merges will be shown before confirmation
-            savePointsPcd(cloud_merged, mergedName,false);
+            *cloud_merged = *cloud_in;  // Initialize cloud merged
+            *cloud_temp = *cloud_in;    // Initialize auxiliary cloud on which temporal merges will be shown before confirmation
+            CloudUtils::savePointsPly(cloud_merged, cloudsPathTo, mergedName, NO_FILENUM);
             initDone = true;
             printf("Base cloud initialized \n");
         }else {
@@ -363,7 +379,7 @@ bool ObjectExplorer::exploreInteractive()
         if ((answerReg == "y")||(answerReg == "Y"))
         {
             printf("\n Saving partial registration for later use \n ");
-            savePointsPcd(cloud_in, cloudName);
+            CloudUtils::savePointsPly(cloud_in, cloudsPathTo, cloudName, numCloudsSaved);
 
             // If the cloud is clean, merge the last recorded cloud_in with the existing cloud_merged and save on cloud_temp
             Eigen::Matrix4f alignMatrix;
@@ -397,7 +413,7 @@ bool ObjectExplorer::exploreInteractive()
                 {
                     printf(" Model not finished, continuing with exploration \n");
                 } else {
-                    savePointsPcd(cloud_merged, mergedName, false);
+                    CloudUtils::savePointsPly(cloud_merged, cloudsPathTo, mergedName, NO_FILENUM);
                     printf(" Final model saved as %s, finishing exploration \n", mergedName.c_str());
                     explorationDone = true;
                 }
@@ -410,7 +426,6 @@ bool ObjectExplorer::exploreInteractive()
         }
     }
 
-    // Visualize merged pointcloud
     printf("Exploration finished, returning control. \n");
     return true;
 }
@@ -639,87 +654,6 @@ bool ObjectExplorer::setVerbose(const string& verb)
 
 
 /*************************** -Helper functions- ******************************/
-
-void ObjectExplorer::mesh2cloud(const iCub::data3D::SurfaceMeshWithBoundingBox& meshB, pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud)
-{   // Converts mesh from a bottle into pcl pointcloud.
-    for (size_t i = 0; i<meshB.mesh.points.size(); ++i)
-    {
-        pcl::PointXYZRGB pointrgb;
-        pointrgb.x=meshB.mesh.points.at(i).x;
-        pointrgb.y=meshB.mesh.points.at(i).y;
-        pointrgb.z=meshB.mesh.points.at(i).z;
-        if (i<meshB.mesh.rgbColour.size())
-        {
-            int32_t rgb= meshB.mesh.rgbColour.at(i).rgba;
-            pointrgb.rgba=rgb;
-            pointrgb.r = (rgb >> 16) & 0x0000ff;
-            pointrgb.g = (rgb >> 8)  & 0x0000ff;
-            pointrgb.b = (rgb)       & 0x0000ff;
-        }
-        else
-            pointrgb.rgb=0;
-
-        cloud->push_back(pointrgb);
-    }
-    if (verbose){cout << "Mesh formatted as Point Cloud of size " << cloud->points.size() << endl;}
-}
-
-
-void ObjectExplorer::cloud2mesh(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, iCub::data3D::SurfaceMeshWithBoundingBox& meshB)
-{   // Converts pointcloud to surfaceMesh bottle.
-
-    if (verbose){printf("Transforming cloud to mesh to be sent out... ");}
-    meshB.mesh.points.clear();
-    meshB.mesh.rgbColour.clear();
-    meshB.mesh.meshName = cloudName;
-    for (unsigned int i=0; i<cloud->width; i++)
-    {
-        meshB.mesh.points.push_back(iCub::data3D::PointXYZ(cloud->at(i).x,cloud->at(i).y, cloud->at(i).z));
-        meshB.mesh.rgbColour.push_back(iCub::data3D::RGBA(cloud->at(i).rgba));
-    }
-    //if (verbose){printf("\n Computing minimum BB.\n");}
-    iCub::data3D::BoundingBox BB = iCub::data3D::MinimumBoundingBox::getMinimumBoundingBox(cloud);
-    meshB.boundingBox = BB.getBoundingBox();
-    if (verbose){printf("\n Mesh obtained from cloud. \n");}
-    return;
-}
-
-
-/************************************************************************/
-void ObjectExplorer::savePointsPly(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, const string& savename, const bool addNum)
-{
-    stringstream s;
-    s.str("");
-    if (addNum){
-        s << cloudsPath + "/" + savename.c_str() << numCloudsSaved;
-        numCloudsSaved++;
-    } else {
-        s << cloudsPath + "/" + savename.c_str();
-    }
-
-    string filename = s.str();
-    string filenameNumb = filename+".ply";
-    ofstream plyfile;
-    plyfile.open(filenameNumb.c_str());
-    plyfile << "ply\n";
-    plyfile << "format ascii 1.0\n";
-    plyfile << "element vertex " << cloud->width <<"\n";
-    plyfile << "property float x\n";
-    plyfile << "property float y\n";
-    plyfile << "property float z\n";
-    plyfile << "property uchar diffuse_red\n";
-    plyfile << "property uchar diffuse_green\n";
-    plyfile << "property uchar diffuse_blue\n";
-    plyfile << "end_header\n";
-
-    for (unsigned int i=0; i<cloud->width; i++)
-        plyfile << cloud->at(i).x << " " << cloud->at(i).y << " " << cloud->at(i).z << " " << (int)cloud->at(i).r << " " << (int)cloud->at(i).g << " " << (int)cloud->at(i).b << "\n";
-
-    plyfile.close();
-
-    fprintf(stdout, "Writing finished\n");
-}
-
 
 void ObjectExplorer::savePointsPcd(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, const string& savename, const bool addNum)
 {

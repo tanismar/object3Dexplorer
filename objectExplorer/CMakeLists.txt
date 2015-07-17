@@ -29,7 +29,7 @@ link_directories(${ICUBCONTRIB_INSTALL_PREFIX}/lib) #This should be added by def
 add_definitions(${PCL_DEFINITIONS})
 
 add_executable(${PROJECTNAME} ${source} ${header})
-target_link_libraries(${PROJECTNAME} ${YARP_LIBRARIES} ${PCL_LIBRARIES} objects3D minimumBoundingBox icubmod)
+target_link_libraries(${PROJECTNAME} ${YARP_LIBRARIES}  objects3D  minimumBoundingBox YarpCloud icubmod ${PCL_LIBRARIES})
 install(TARGETS ${PROJECTNAME} DESTINATION bin)
 
 yarp_install(FILES ${PROJECTNAME}.xml DESTINATION ${ICUBCONTRIB_MODULES_INSTALL_DIR})

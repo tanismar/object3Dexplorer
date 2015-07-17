@@ -38,6 +38,8 @@
 #include <iCub/data3D/minBoundBox.h>
 #include <iCub/data3D/RGBA.h>
 
+#include "iCub/YarpCloud/CloudUtils.h"
+
 //PCL libs
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -76,7 +78,8 @@ protected:
     // config variables
     std::string                         eye;
     std::string                         robot;    
-    std::string                         cloudsPath;
+    std::string                         cloudsPathFrom;
+    std::string                         cloudsPathTo;
     std::string                         cloudName;
     bool                                verbose;
     bool                                normalizePose;
@@ -85,6 +88,7 @@ protected:
     bool                                initAlignment;
     bool                                closing;    
     int                                 numCloudsSaved;
+    int                                 NO_FILENUM;
 
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr      cloud_in;       // Last registered pointcloud
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr      cloud_temp;   // Merged pointcloud
@@ -106,13 +110,9 @@ protected:
     /* Configuration commands */ 
     bool                changeModelName(const std::string& modelname);
     bool                setVerbose(const std::string& verb);
+    bool                setNormalization(const std::string& norm);
+    bool                setInitialAlignment(const std::string& fpfh);
 
-    /* helper functions */
-    void                mesh2cloud(const iCub::data3D::SurfaceMeshWithBoundingBox& meshB, pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud);
-    void                cloud2mesh(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, iCub::data3D::SurfaceMeshWithBoundingBox& meshB);
-    void                savePointsPly(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, const std::string& savename, const bool addNum = true);
-    void                savePointsPcd(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, const std::string& savename, const bool addNum = true);
-    
 public:
 
    // RF modules overrides    
